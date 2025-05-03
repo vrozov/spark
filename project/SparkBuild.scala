@@ -356,6 +356,9 @@ object SparkBuild extends PomBuild {
       "-sourcepath", (ThisBuild / baseDirectory).value.getAbsolutePath  // Required for relative source links in scaladoc
     ),
 
+    // Define mvn.executable property for Maven invoker
+    (Test / javaOptions) += s"-Dmvn.executable=${BuildCommons.sparkHome.getAbsolutePath}/build/mvn",
+
     SbtPomKeys.profiles := profiles,
 
     // Remove certain packages from Scaladoc
