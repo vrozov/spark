@@ -88,7 +88,7 @@
     </dependency>
     <dependency>
       <groupId>com.lihaoyi</groupId>
-      <artifactId>ammonite_${scala.version}</artifactId>
+      <artifactId>ammonite_2.13.16</artifactId>
       <version>${ammonite.version}</version>
       <exclusions>
         <!--
