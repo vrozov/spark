@@ -17,9 +17,9 @@
 
 package org.apache.spark.streaming.kinesis;
 
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import software.amazon.kinesis.common.InitialPositionInStream;
 
 import org.apache.spark.streaming.kinesis.KinesisInitialPositions.TrimHorizon;
 import org.apache.spark.storage.StorageLevel;
@@ -81,7 +81,7 @@ public class JavaKinesisInputDStreamBuilderSuite extends LocalJavaStreamingConte
       .streamName(streamName)
       .endpointUrl(endpointUrl)
       .regionName(region)
-      .initialPositionInStream(InitialPositionInStream.LATEST)
+      .initialPosition(new KinesisInitialPositions.Latest())
       .checkpointAppName(appName)
       .checkpointInterval(checkpointInterval)
       .storageLevel(storageLevel)

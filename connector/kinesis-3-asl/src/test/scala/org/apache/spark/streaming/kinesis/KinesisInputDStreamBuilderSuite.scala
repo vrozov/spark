@@ -21,10 +21,10 @@ import java.util.Calendar
 
 import scala.jdk.CollectionConverters._
 
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration}
-import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
 import org.scalatest.BeforeAndAfterEach
 import org.scalatestplus.mockito.MockitoSugar
+import software.amazon.kinesis.common.InitialPositionInStream
+import software.amazon.kinesis.metrics.{MetricsConfig, MetricsLevel}
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Duration, Seconds, StreamingContext, TestSuiteBase}
@@ -85,8 +85,8 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
     assert(dstream.kinesisCreds == DefaultCredentials)
     assert(dstream.dynamoDBCreds == None)
     assert(dstream.cloudWatchCreds == None)
-    assert(dstream.metricsLevel == DEFAULT_METRICS_LEVEL)
-    assert(dstream.metricsEnabledDimensions == DEFAULT_METRICS_ENABLED_DIMENSIONS)
+    assert(dstream.metricsLevel == None)
+    assert(dstream.metricsEnabledDimensions == None)
   }
 
   test("should propagate custom non-auth values to KinesisInputDStream") {
@@ -100,8 +100,7 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
     val customDynamoDBCreds = mock[SparkAwsCredentials]
     val customCloudWatchCreds = mock[SparkAwsCredentials]
     val customMetricsLevel = MetricsLevel.NONE
-    val customMetricsEnabledDimensions =
-      KinesisClientLibConfiguration.METRICS_ALWAYS_ENABLED_DIMENSIONS.asScala.toSet
+    val customMetricsEnabledDimensions = MetricsConfig.METRICS_DIMENSIONS_ALL.asScala.toSet
 
     val dstream = builder
       .endpointUrl(customEndpointUrl)
@@ -123,10 +122,10 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
     assert(dstream.checkpointInterval == customCheckpointInterval)
     assert(dstream._storageLevel == customStorageLevel)
     assert(dstream.kinesisCreds == customKinesisCreds)
-    assert(dstream.dynamoDBCreds == Option(customDynamoDBCreds))
-    assert(dstream.cloudWatchCreds == Option(customCloudWatchCreds))
-    assert(dstream.metricsLevel == customMetricsLevel)
-    assert(dstream.metricsEnabledDimensions == customMetricsEnabledDimensions)
+    assert(dstream.dynamoDBCreds.get == customDynamoDBCreds)
+    assert(dstream.cloudWatchCreds.get == customCloudWatchCreds)
+    assert(dstream.metricsLevel.get == customMetricsLevel)
+    assert(dstream.metricsEnabledDimensions.get == customMetricsEnabledDimensions)
 
     // Testing with AtTimestamp
     val cal = Calendar.getInstance()
@@ -157,13 +156,13 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
     assert(dstreamAtTimestamp.checkpointInterval == customCheckpointInterval)
     assert(dstreamAtTimestamp._storageLevel == customStorageLevel)
     assert(dstreamAtTimestamp.kinesisCreds == customKinesisCreds)
-    assert(dstreamAtTimestamp.dynamoDBCreds == Option(customDynamoDBCreds))
-    assert(dstreamAtTimestamp.cloudWatchCreds == Option(customCloudWatchCreds))
-    assert(dstreamAtTimestamp.metricsLevel == customMetricsLevel)
-    assert(dstreamAtTimestamp.metricsEnabledDimensions == customMetricsEnabledDimensions)
+    assert(dstreamAtTimestamp.dynamoDBCreds.get == customDynamoDBCreds)
+    assert(dstreamAtTimestamp.cloudWatchCreds.get == customCloudWatchCreds)
+    assert(dstreamAtTimestamp.metricsLevel.get == customMetricsLevel)
+    assert(dstreamAtTimestamp.metricsEnabledDimensions.get == customMetricsEnabledDimensions)
   }
 
-  test("old Api should throw UnsupportedOperationExceptionexception with AT_TIMESTAMP") {
+  test("old Api should throw UnsupportedOperationException with AT_TIMESTAMP") {
     val streamName: String = "a-very-nice-stream-name"
     val endpointUrl: String = "https://kinesis.us-west-2.amazonaws.com"
     val region: String = "us-west-2"

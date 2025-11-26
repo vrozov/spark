@@ -24,14 +24,14 @@ import scala.jdk.CollectionConverters._
 import software.amazon.awssdk.regions.servicemetadata.KinesisServiceMetadata
 
 private[streaming] object KinesisExampleUtils {
-  private val hosts = {
+  private val paths = {
     val metadata = new KinesisServiceMetadata
-    metadata.regions.asScala.toSeq.map(metadata.endpointFor(_).getHost)
+    metadata.regions.asScala.toSeq.map(metadata.endpointFor(_).getPath)
   }
 
   def getRegionNameByEndpoint(endpoint: String): String = {
-    val host = new URI(endpoint).getHost
-    hosts.find(h => h.equals(host)).getOrElse(
+    val path = URI.create(endpoint).getPath
+    paths.find(path.equals(_)).getOrElse(
       throw new IllegalArgumentException(s"Could not resolve region for endpoint: $endpoint"))
   }
 }

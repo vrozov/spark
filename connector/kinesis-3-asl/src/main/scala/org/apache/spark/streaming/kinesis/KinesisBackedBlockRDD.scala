@@ -81,7 +81,6 @@ class KinesisBackedBlockRDDPartition(
 private[kinesis]
 class KinesisBackedBlockRDD[T: ClassTag](
     sc: SparkContext,
-    val regionName: String,
     val endpointUrl: String,
     @transient private val _blockIds: Array[BlockId],
     @transient val arrayOfseqNumberRanges: Array[SequenceNumberRanges],
@@ -115,7 +114,7 @@ class KinesisBackedBlockRDD[T: ClassTag](
 
     def getBlockFromKinesis(): Iterator[T] = {
       partition.seqNumberRanges.ranges.iterator.flatMap { range =>
-        new KinesisSequenceRangeIterator(kinesisCreds.provider, endpointUrl, regionName,
+        new KinesisSequenceRangeIterator(kinesisCreds.provider, endpointUrl,
           range, kinesisReadConfigs).map(messageHandler)
       }
     }
@@ -137,7 +136,6 @@ private[kinesis]
 class KinesisSequenceRangeIterator(
     credentialsProvider: AwsCredentialsProvider,
     endpointUrl: String,
-    regionId: String,
     range: SequenceNumberRange,
     kinesisReadConfigs: KinesisReadConfigurations) extends NextIterator[KinesisClientRecord]
     with Logging {

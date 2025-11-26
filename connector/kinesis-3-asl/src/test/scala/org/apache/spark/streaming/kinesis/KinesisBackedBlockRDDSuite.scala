@@ -24,7 +24,9 @@ import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBloc
 import org.apache.spark.util.ArrayImplicits._
 
 abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
-  extends KinesisFunSuite with BeforeAndAfterEach with LocalSparkContext {
+    extends KinesisFunSuite
+    with BeforeAndAfterEach
+    with LocalSparkContext {
 
   private val testData = 1 to 8
 
@@ -52,7 +54,11 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
       shardIdToSeqNumbers = shardIdToDataAndSeqNumbers.transform((_, v) => v.map(_._2))
       shardIdToRange = shardIdToSeqNumbers.map { case (shardId, seqNumbers) =>
         val seqNumRange = SequenceNumberRange(
-          testUtils.streamName, shardId, seqNumbers.head, seqNumbers.last, seqNumbers.size)
+          testUtils.streamName,
+          shardId,
+          seqNumbers.head,
+          seqNumbers.last,
+          seqNumbers.size)
         (shardId, seqNumRange)
       }
       allRanges = shardIdToRange.values.toSeq
@@ -78,24 +84,33 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
 
   testIfEnabled("Basic reading from Kinesis") {
     // Verify all data using multiple ranges in a single RDD partition
-    val receivedData1 = new KinesisBackedBlockRDD[Array[Byte]](sc, testUtils.regionName,
-      testUtils.endpointUrl, fakeBlockIds(1),
-      Array(SequenceNumberRanges(allRanges.toArray.toImmutableArraySeq))
-    ).map { bytes => new String(bytes).toInt }.collect()
+    val receivedData1 = new KinesisBackedBlockRDD[Array[Byte]](
+      sc,
+      testUtils.endpointUrl,
+      fakeBlockIds(1),
+      Array(SequenceNumberRanges(allRanges.toArray.toImmutableArraySeq)))
+      .map { bytes => new String(bytes).toInt }
+      .collect()
     assert(receivedData1.toSet === testData.toSet)
 
     // Verify all data using one range in each of the multiple RDD partitions
-    val receivedData2 = new KinesisBackedBlockRDD[Array[Byte]](sc, testUtils.regionName,
-      testUtils.endpointUrl, fakeBlockIds(allRanges.size),
-      allRanges.map { range => SequenceNumberRanges(Array(range).toImmutableArraySeq) }.toArray
-    ).map { bytes => new String(bytes).toInt }.collect()
+    val receivedData2 = new KinesisBackedBlockRDD[Array[Byte]](
+      sc,
+      testUtils.endpointUrl,
+      fakeBlockIds(allRanges.size),
+      allRanges.map { range => SequenceNumberRanges(Array(range).toImmutableArraySeq) }.toArray)
+      .map { bytes => new String(bytes).toInt }
+      .collect()
     assert(receivedData2.toSet === testData.toSet)
 
     // Verify ordering within each partition
-    val receivedData3 = new KinesisBackedBlockRDD[Array[Byte]](sc, testUtils.regionName,
-      testUtils.endpointUrl, fakeBlockIds(allRanges.size),
-      allRanges.map { range => SequenceNumberRanges(Array(range).toImmutableArraySeq) }.toArray
-    ).map { bytes => new String(bytes).toInt }.collectPartitions()
+    val receivedData3 = new KinesisBackedBlockRDD[Array[Byte]](
+      sc,
+      testUtils.endpointUrl,
+      fakeBlockIds(allRanges.size),
+      allRanges.map { range => SequenceNumberRanges(Array(range).toImmutableArraySeq) }.toArray)
+      .map { bytes => new String(bytes).toInt }
+      .collectPartitions()
     assert(receivedData3.length === allRanges.size)
     for (i <- allRanges.indices) {
       assert(receivedData3(i).toSeq === shardIdToData(allRanges(i).shardId))
@@ -119,57 +134,68 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
   }
 
   testIfEnabled("Test isBlockValid skips block fetching from block manager") {
-    testRDD(numPartitions = 2, numPartitionsInBM = 2, numPartitionsInKinesis = 0,
+    testRDD(
+      numPartitions = 2,
+      numPartitionsInBM = 2,
+      numPartitionsInKinesis = 0,
       testIsBlockValid = true)
   }
 
   testIfEnabled("Test whether RDD is valid after removing blocks from block manager") {
-    testRDD(numPartitions = 2, numPartitionsInBM = 2, numPartitionsInKinesis = 2,
+    testRDD(
+      numPartitions = 2,
+      numPartitionsInBM = 2,
+      numPartitionsInKinesis = 2,
       testBlockRemove = true)
   }
 
   /**
-   * Test the WriteAheadLogBackedRDD, by writing some partitions of the data to block manager
-   * and the rest to a write ahead log, and then reading it all back using the RDD.
-   * It can also test if the partitions that were read from the log were again stored in
-   * block manager.
+   * Test the WriteAheadLogBackedRDD, by writing some partitions of the data to block manager and
+   * the rest to a write ahead log, and then reading it all back using the RDD. It can also test
+   * if the partitions that were read from the log were again stored in block manager.
    *
+   * @param numPartitions
+   *   Number of partitions in RDD
+   * @param numPartitionsInBM
+   *   Number of partitions to write to the BlockManager. Partitions 0 to (numPartitionsInBM-1)
+   *   will be written to BlockManager
+   * @param numPartitionsInKinesis
+   *   Number of partitions to write to the Kinesis. Partitions (numPartitions - 1 -
+   *   numPartitionsInKinesis) to (numPartitions - 1) will be written to Kinesis
+   * @param testIsBlockValid
+   *   Test whether setting isBlockValid to false skips block fetching
+   * @param testBlockRemove
+   *   Test whether calling rdd.removeBlock() makes the RDD still usable with reads falling back
+   *   to the WAL Example with numPartitions = 5, numPartitionsInBM = 3, and numPartitionsInWAL =
+   *   4
    *
-   *
-   * @param numPartitions Number of partitions in RDD
-   * @param numPartitionsInBM Number of partitions to write to the BlockManager.
-   *                          Partitions 0 to (numPartitionsInBM-1) will be written to BlockManager
-   * @param numPartitionsInKinesis Number of partitions to write to the Kinesis.
-   *                           Partitions (numPartitions - 1 - numPartitionsInKinesis) to
-   *                           (numPartitions - 1) will be written to Kinesis
-   * @param testIsBlockValid Test whether setting isBlockValid to false skips block fetching
-   * @param testBlockRemove Test whether calling rdd.removeBlock() makes the RDD still usable with
-   *                        reads falling back to the WAL
-   * Example with numPartitions = 5, numPartitionsInBM = 3, and numPartitionsInWAL = 4
-   *
-   *   numPartitionsInBM = 3
-   *   |------------------|
-   *   |                  |
-   *    0       1       2       3       4
-   *           |                         |
-   *           |-------------------------|
-   *              numPartitionsInKinesis = 4
+   * numPartitionsInBM = 3
+   * | ------------------ |
+   * |:-------------------|
+   * |                    |
+   * 0 1 2 3 4
+   * |  |
+   * |:-|
+   * numPartitionsInKinesis = 4
    */
   private def testRDD(
       numPartitions: Int,
       numPartitionsInBM: Int,
       numPartitionsInKinesis: Int,
       testIsBlockValid: Boolean = false,
-      testBlockRemove: Boolean = false
-    ): Unit = {
+      testBlockRemove: Boolean = false): Unit = {
     require(shardIds.size > 1, "Need at least 2 shards to test")
-    require(numPartitionsInBM <= shardIds.size,
+    require(
+      numPartitionsInBM <= shardIds.size,
       "Number of partitions in BlockManager cannot be more than the Kinesis test shards available")
-    require(numPartitionsInKinesis <= shardIds.size,
+    require(
+      numPartitionsInKinesis <= shardIds.size,
       "Number of partitions in Kinesis cannot be more than the Kinesis test shards available")
-    require(numPartitionsInBM <= numPartitions,
+    require(
+      numPartitionsInBM <= numPartitions,
       "Number of partitions in BlockManager cannot be more than that in RDD")
-    require(numPartitionsInKinesis <= numPartitions,
+    require(
+      numPartitionsInKinesis <= numPartitions,
       "Number of partitions in Kinesis cannot be more than that in RDD")
 
     // Put necessary blocks in the block manager
@@ -189,36 +215,38 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
     }
     val ranges = (fakeRanges ++ realRanges)
 
-
     // Make sure that the left `numPartitionsInBM` blocks are in block manager, and others are not
     require(
       blockIds.take(numPartitionsInBM).forall(blockManager.get(_).nonEmpty),
-      "Expected blocks not in BlockManager"
-    )
+      "Expected blocks not in BlockManager")
 
     require(
       blockIds.drop(numPartitionsInBM).forall(blockManager.get(_).isEmpty),
-      "Unexpected blocks in BlockManager"
-    )
+      "Unexpected blocks in BlockManager")
 
     // Make sure that the right sequence `numPartitionsInKinesis` are configured, and others are not
     require(
       ranges.takeRight(numPartitionsInKinesis).forall {
         _.ranges.forall { _.streamName == testUtils.streamName }
-      }, "Incorrect configuration of RDD, expected ranges not set: "
-    )
+      },
+      "Incorrect configuration of RDD, expected ranges not set: ")
 
     require(
       ranges.dropRight(numPartitionsInKinesis).forall {
         _.ranges.forall { _.streamName != testUtils.streamName }
-      }, "Incorrect configuration of RDD, unexpected ranges set"
-    )
+      },
+      "Incorrect configuration of RDD, unexpected ranges set")
 
     val rdd = new KinesisBackedBlockRDD[Array[Byte]](
-      sc, testUtils.regionName, testUtils.endpointUrl, blockIds, ranges)
-    val collectedData = rdd.map { bytes =>
-      new String(bytes).toInt
-    }.collect()
+      sc,
+      testUtils.endpointUrl,
+      blockIds,
+      ranges)
+    val collectedData = rdd
+      .map { bytes =>
+        new String(bytes).toInt
+      }
+      .collect()
     assert(collectedData.toSet === testData.toSet)
 
     // Verify that the block fetching is skipped when isBlockValid is set to false.
@@ -229,7 +257,10 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
       require(numPartitionsInBM === numPartitions, "All partitions must be in BlockManager")
       require(numPartitionsInKinesis === 0, "No partitions must be in Kinesis")
       val rdd2 = new KinesisBackedBlockRDD[Array[Byte]](
-        sc, testUtils.regionName, testUtils.endpointUrl, blockIds.toArray, ranges,
+        sc,
+        testUtils.endpointUrl,
+        blockIds.toArray,
+        ranges,
         isBlockIdValid = Array.fill(blockIds.length)(false))
       intercept[SparkException] {
         rdd2.collect()
@@ -239,7 +270,8 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
     // Verify that the RDD is not invalid after the blocks are removed and can still read data
     // from write ahead log
     if (testBlockRemove) {
-      require(numPartitions === numPartitionsInKinesis,
+      require(
+        numPartitions === numPartitionsInKinesis,
         "All partitions must be in WAL for this test")
       require(numPartitionsInBM > 0, "Some partitions must be in BlockManager for this test")
       rdd.removeBlocks()
@@ -254,7 +286,7 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
 }
 
 class WithAggregationKinesisBackedBlockRDDSuite
-  extends KinesisBackedBlockRDDTests(aggregateTestData = true)
+    extends KinesisBackedBlockRDDTests(aggregateTestData = true)
 
 class WithoutAggregationKinesisBackedBlockRDDSuite
-  extends KinesisBackedBlockRDDTests(aggregateTestData = false)
+    extends KinesisBackedBlockRDDTests(aggregateTestData = false)

@@ -43,51 +43,57 @@ import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
- * Custom AWS Kinesis-specific implementation of Spark Streaming's Receiver.
- * This implementation relies on the Kinesis Client Library (KCL) Worker as described here:
+ * Custom AWS Kinesis-specific implementation of Spark Streaming's Receiver. This implementation
+ * relies on the Kinesis Client Library (KCL) Worker as described here:
  * https://github.com/awslabs/amazon-kinesis-client
  *
  * The way this Receiver works is as follows:
  *
- *  - The receiver starts a KCL Worker, which is essentially runs a threadpool of multiple
- *    KinesisRecordProcessor
- *  - Each KinesisRecordProcessor receives data from a Kinesis shard in batches. Each batch is
- *    inserted into a Block Generator, and the corresponding range of sequence numbers is recorded.
- *  - When the block generator defines a block, then the recorded sequence number ranges that were
- *    inserted into the block are recorded separately for being used later.
- *  - When the block is ready to be pushed, the block is pushed and the ranges are reported as
- *    metadata of the block. In addition, the ranges are used to find out the latest sequence
- *    number for each shard that can be checkpointed through the DynamoDB.
- *  - Periodically, each KinesisRecordProcessor checkpoints the latest successfully stored sequence
- *    number for it own shard.
+ *   - The receiver starts a KCL Worker, which is essentially runs a threadpool of multiple
+ *     KinesisRecordProcessor
+ *   - Each KinesisRecordProcessor receives data from a Kinesis shard in batches. Each batch is
+ *     inserted into a Block Generator, and the corresponding range of sequence numbers is
+ *     recorded.
+ *   - When the block generator defines a block, then the recorded sequence number ranges that
+ *     were inserted into the block are recorded separately for being used later.
+ *   - When the block is ready to be pushed, the block is pushed and the ranges are reported as
+ *     metadata of the block. In addition, the ranges are used to find out the latest sequence
+ *     number for each shard that can be checkpointed through the DynamoDB.
+ *   - Periodically, each KinesisRecordProcessor checkpoints the latest successfully stored
+ *     sequence number for it own shard.
  *
- * @param streamName   Kinesis stream name
- * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
- * @param regionName  Region name used by the Kinesis Client Library for
- *                    DynamoDB (lease coordination and checkpointing) and CloudWatch (metrics)
- * @param initialPosition  Instance of [[KinesisInitialPosition]]
- *                         In the absence of Kinesis checkpoint info, this is the
- *                         worker's initial starting position in the stream.
- *                         The values are either the beginning of the stream
- *                         per Kinesis' limit of 24 hours
- *                         ([[KinesisInitialPositions.TrimHorizon]]) or
- *                         the tip of the stream ([[KinesisInitialPositions.Latest]]).
- * @param checkpointAppName  Kinesis application name. Kinesis Apps are mapped to Kinesis Streams
- *                 by the Kinesis Client Library.  If you change the App name or Stream name,
- *                 the KCL will throw errors.  This usually requires deleting the backing
- *                 DynamoDB table with the same name this Kinesis application.
- * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
- *                            See the Kinesis Spark Streaming documentation for more
- *                            details on the different types of checkpoints.
- * @param storageLevel Storage level to use for storing the received objects
- * @param kinesisCreds SparkAWSCredentials instance that will be used to generate the
- *                     AWSCredentialsProvider passed to the KCL to authorize Kinesis API calls.
- * @param cloudWatchCreds Optional SparkAWSCredentials instance that will be used to generate the
- *                        AWSCredentialsProvider passed to the KCL to authorize CloudWatch API
- *                        calls. Will use kinesisCreds if value is None.
- * @param dynamoDBCreds Optional SparkAWSCredentials instance that will be used to generate the
- *                      AWSCredentialsProvider passed to the KCL to authorize DynamoDB API calls.
- *                      Will use kinesisCreds if value is None.
+ * @param streamName
+ *   Kinesis stream name
+ * @param endpointUrl
+ *   Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
+ * @param regionName
+ *   Region name used by the Kinesis Client Library for DynamoDB (lease coordination and
+ *   checkpointing) and CloudWatch (metrics)
+ * @param initialPosition
+ *   Instance of [[KinesisInitialPosition]] In the absence of Kinesis checkpoint info, this is the
+ *   worker's initial starting position in the stream. The values are either the beginning of the
+ *   stream per Kinesis' limit of 24 hours ([[KinesisInitialPositions.TrimHorizon]]) or the tip of
+ *   the stream ([[KinesisInitialPositions.Latest]]).
+ * @param checkpointAppName
+ *   Kinesis application name. Kinesis Apps are mapped to Kinesis Streams by the Kinesis Client
+ *   Library. If you change the App name or Stream name, the KCL will throw errors. This usually
+ *   requires deleting the backing DynamoDB table with the same name this Kinesis application.
+ * @param checkpointInterval
+ *   Checkpoint interval for Kinesis checkpointing. See the Kinesis Spark Streaming documentation
+ *   for more details on the different types of checkpoints.
+ * @param storageLevel
+ *   Storage level to use for storing the received objects
+ * @param kinesisCreds
+ *   SparkAWSCredentials instance that will be used to generate the AWSCredentialsProvider passed
+ *   to the KCL to authorize Kinesis API calls.
+ * @param cloudWatchCreds
+ *   Optional SparkAWSCredentials instance that will be used to generate the
+ *   AWSCredentialsProvider passed to the KCL to authorize CloudWatch API calls. Will use
+ *   kinesisCreds if value is None.
+ * @param dynamoDBCreds
+ *   Optional SparkAWSCredentials instance that will be used to generate the
+ *   AWSCredentialsProvider passed to the KCL to authorize DynamoDB API calls. Will use
+ *   kinesisCreds if value is None.
  */
 private[kinesis] class KinesisReceiver[T](
     val streamName: String,
@@ -103,7 +109,8 @@ private[kinesis] class KinesisReceiver[T](
     cloudWatchCreds: Option[SparkAwsCredentials] = None,
     metricsLevel: Option[MetricsLevel] = None,
     metricsEnabledDimensions: Option[Set[String]] = None)
-  extends Receiver[T](storageLevel) with Logging { receiver =>
+    extends Receiver[T](storageLevel)
+    with Logging { receiver =>
 
   /*
    * =================================================================================
@@ -121,10 +128,9 @@ private[kinesis] class KinesisReceiver[T](
   private var schedulerId: String = ""
 
   /**
-   * Scheduler is the core client abstraction from the Kinesis Client Library (KCL).
-   * A scheduler can process more than one shard from the given stream.
-   * Each shard is assigned its own ShardRecordProcessor and the scheduler run multiple such
-   * processors.
+   * Scheduler is the core client abstraction from the Kinesis Client Library (KCL). A scheduler
+   * can process more than one shard from the given stream. Each shard is assigned its own
+   * ShardRecordProcessor and the scheduler run multiple such processors.
    */
   @transient
   @volatile
@@ -140,8 +146,8 @@ private[kinesis] class KinesisReceiver[T](
   private var blockGenerator: Option[BlockGenerator] = None
 
   /**
-   * Sequence number ranges added to the current block being generated.
-   * Accessing and updating of this map is synchronized by locks in BlockGenerator.
+   * Sequence number ranges added to the current block being generated. Accessing and updating of
+   * this map is synchronized by locks in BlockGenerator.
    */
   private val seqNumRangesInCurrentBlock = new mutable.ArrayBuffer[SequenceNumberRange]
 
@@ -156,13 +162,14 @@ private[kinesis] class KinesisReceiver[T](
   private var kinesisCheckpointer: Option[KinesisCheckpointer] = None
 
   /**
-   * Latest sequence number ranges that have been stored successfully.
-   * This is used for checkpointing through KCL */
+   * Latest sequence number ranges that have been stored successfully. This is used for
+   * checkpointing through KCL
+   */
   private val shardIdToLatestStoredSeqNum = new ConcurrentHashMap[String, String]
 
   /**
-   * This is called when the KinesisReceiver starts and must be non-blocking.
-   * The KCL creates and manages the receiving/processing thread pool through Scheduler.run().
+   * This is called when the KinesisReceiver starts and must be non-blocking. The KCL creates and
+   * manages the receiving/processing thread pool through Scheduler.run().
    */
   override def onStart(): Unit = {
     schedulerId = Utils.localHostName() + ":" + UUID.randomUUID()
@@ -180,47 +187,52 @@ private[kinesis] class KinesisReceiver[T](
     val region = Region.of(regionName)
     val kinesisClient = KinesisClientUtil.createKinesisAsyncClient(
       KinesisAsyncClient.builder
-        .region(region)
         .credentialsProvider(kinesisProvider)
         .endpointOverride(URI.create(endpointUrl)))
     val dynamoClient = DynamoDbAsyncClient.builder
-        .region(region)
-        .credentialsProvider(dynamoDBCreds.map(_.provider).getOrElse(kinesisProvider))
-        .build()
+      .region(region)
+      .credentialsProvider(dynamoDBCreds.map(_.provider).getOrElse(kinesisProvider))
+      .build()
     val cloudWatchClient = CloudWatchAsyncClient.builder
-        .region(region)
-        .credentialsProvider(cloudWatchCreds.map(_.provider).getOrElse(kinesisProvider))
-        .build()
+      .region(region)
+      .credentialsProvider(cloudWatchCreds.map(_.provider).getOrElse(kinesisProvider))
+      .build()
     val recordProcessorFactory = new ShardRecordProcessorFactory {
       override def shardRecordProcessor(): ShardRecordProcessor = {
         new KinesisShardRecordProcessor(receiver, schedulerId)
       }
     }
-    val configsBuilder = new ConfigsBuilder(streamName, checkpointAppName, kinesisClient,
-      dynamoClient, cloudWatchClient, schedulerId, recordProcessorFactory)
+    val configsBuilder = new ConfigsBuilder(
+      streamName,
+      checkpointAppName,
+      kinesisClient,
+      dynamoClient,
+      cloudWatchClient,
+      schedulerId,
+      recordProcessorFactory)
 
     val metricsConfig = configsBuilder.metricsConfig()
     metricsLevel.foreach(metricsConfig.metricsLevel(_))
     metricsEnabledDimensions.foreach(d =>
       metricsConfig.metricsEnabledDimensions(new HashSet(d.asJava)))
-    scheduler = Some(new Scheduler(
-      configsBuilder.checkpointConfig(),
-      configsBuilder.coordinatorConfig(),
-      configsBuilder.leaseManagementConfig(),
-      configsBuilder.lifecycleConfig(),
-      metricsConfig,
-      configsBuilder.processorConfig(),
-      configsBuilder.retrievalConfig()
-    ) {
-      override def run(): Unit = {
-        try {
-          super.run()
-        } catch {
-          case NonFatal(e) =>
-            restart(s"Error running the KCL scheduler ${schedulerId} in Receiver", e)
+    scheduler = Some(
+      new Scheduler(
+        configsBuilder.checkpointConfig(),
+        configsBuilder.coordinatorConfig(),
+        configsBuilder.leaseManagementConfig(),
+        configsBuilder.lifecycleConfig(),
+        metricsConfig,
+        configsBuilder.processorConfig(),
+        configsBuilder.retrievalConfig()) {
+        override def run(): Unit = {
+          try {
+            super.run()
+          } catch {
+            case NonFatal(e) =>
+              restart(s"Error running the KCL scheduler ${schedulerId} in Receiver", e)
+          }
         }
-      }
-    })
+      })
 
     scheduler.foreach { s =>
       schedulerThread = Some(new Thread(s, s"Kinesis Receiver ${streamId}"))
@@ -234,9 +246,9 @@ private[kinesis] class KinesisReceiver[T](
   }
 
   /**
-   * This is called when the KinesisReceiver stops.
-   * The KCL worker.shutdown() method stops the receiving/processing threads.
-   * The KCL will do its best to drain and checkpoint any in-flight records upon shutdown.
+   * This is called when the KinesisReceiver stops. The KCL worker.shutdown() method stops the
+   * receiving/processing threads. The KCL will do its best to drain and checkpoint any in-flight
+   * records upon shutdown.
    */
   override def onStop(): Unit = {
     schedulerThread.foreach(t => {
@@ -255,8 +267,12 @@ private[kinesis] class KinesisReceiver[T](
   /** Add records of the given shard to the current block being generated */
   private[kinesis] def addRecords(shardId: String, records: Seq[KinesisClientRecord]): Unit = {
     val dataIterator = records.iterator.map(messageHandler)
-    val metadata = SequenceNumberRange(streamName, shardId,
-      records.head.sequenceNumber, records.last.sequenceNumber, records.size)
+    val metadata = SequenceNumberRange(
+      streamName,
+      shardId,
+      records.head.sequenceNumber,
+      records.last.sequenceNumber,
+      records.size)
     blockGenerator
       .getOrElse(throw new IllegalStateException("Kinesis block generator not initialized!"))
       .addMultipleDataWithCallback(dataIterator, metadata)
@@ -292,12 +308,10 @@ private[kinesis] class KinesisReceiver[T](
    * checkpoint one last time for the given shard. If `checkpointer` is `None`, then we will not
    * checkpoint.
    */
-  def removeCheckpointer(
-    shardId: String,
-    checkpointer: RecordProcessorCheckpointer): Unit = {
+  def removeCheckpointer(shardId: String, checkpointer: RecordProcessorCheckpointer): Unit = {
     kinesisCheckpointer
-        .getOrElse(throw new IllegalStateException("Kinesis Checkpointer not initialized!"))
-        .removeCheckpointer(shardId, checkpointer)
+      .getOrElse(throw new IllegalStateException("Kinesis Checkpointer not initialized!"))
+      .removeCheckpointer(shardId, checkpointer)
   }
 
   /**
@@ -309,11 +323,12 @@ private[kinesis] class KinesisReceiver[T](
   }
 
   /**
-   * Finalize the ranges added to the block that was active and prepare the ranges buffer
-   * for next block. Internally, this is synchronized with `rememberAddedRange()`.
+   * Finalize the ranges added to the block that was active and prepare the ranges buffer for next
+   * block. Internally, this is synchronized with `rememberAddedRange()`.
    */
   private def finalizeRangesForCurrentBlock(blockId: StreamBlockId): Unit = {
-    blockIdToSeqNumRanges.put(blockId,
+    blockIdToSeqNumRanges.put(
+      blockId,
       SequenceNumberRanges(seqNumRangesInCurrentBlock.toArray.toImmutableArraySeq))
     seqNumRangesInCurrentBlock.clear()
     logDebug(s"Generated block $blockId has $blockIdToSeqNumRanges")
@@ -321,11 +336,13 @@ private[kinesis] class KinesisReceiver[T](
 
   /** Store the block along with its associated ranges */
   private def storeBlockWithRanges(
-      blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[T]): Unit = {
+      blockId: StreamBlockId,
+      arrayBuffer: mutable.ArrayBuffer[T]): Unit = {
     val rangesToReportOption = Option(blockIdToSeqNumRanges.remove(blockId))
     if (rangesToReportOption.isEmpty) {
-      stop("Error while storing block into Spark, could not find sequence number ranges " +
-        s"for block $blockId")
+      stop(
+        "Error while storing block into Spark, could not find sequence number ranges " +
+          s"for block $blockId")
       return
     }
 
@@ -356,29 +373,29 @@ private[kinesis] class KinesisReceiver[T](
   }
 
   /**
-   * Class to handle blocks generated by this receiver's block generator. Specifically, in
-   * the context of the Kinesis Receiver, this handler does the following.
+   * Class to handle blocks generated by this receiver's block generator. Specifically, in the
+   * context of the Kinesis Receiver, this handler does the following.
    *
-   * - When an array of records is added to the current active block in the block generator,
-   *   this handler keeps track of the corresponding sequence number range.
-   * - When the currently active block is ready to sealed (not more records), this handler
-   *   keep track of the list of ranges added into this block in another H
+   *   - When an array of records is added to the current active block in the block generator,
+   *     this handler keeps track of the corresponding sequence number range.
+   *   - When the currently active block is ready to sealed (not more records), this handler keep
+   *     track of the list of ranges added into this block in another H
    */
   private class GeneratedBlockHandler extends BlockGeneratorListener {
 
     /**
-     * Callback method called after a data item is added into the BlockGenerator.
-     * The data addition, block generation, and calls to onAddData and onGenerateBlock
-     * are all synchronized through the same lock.
+     * Callback method called after a data item is added into the BlockGenerator. The data
+     * addition, block generation, and calls to onAddData and onGenerateBlock are all synchronized
+     * through the same lock.
      */
     def onAddData(data: Any, metadata: Any): Unit = {
       rememberAddedRange(metadata.asInstanceOf[SequenceNumberRange])
     }
 
     /**
-     * Callback method called after a block has been generated.
-     * The data addition, block generation, and calls to onAddData and onGenerateBlock
-     * are all synchronized through the same lock.
+     * Callback method called after a block has been generated. The data addition, block
+     * generation, and calls to onAddData and onGenerateBlock are all synchronized through the
+     * same lock.
      */
     def onGenerateBlock(blockId: StreamBlockId): Unit = {
       finalizeRangesForCurrentBlock(blockId)
@@ -386,8 +403,7 @@ private[kinesis] class KinesisReceiver[T](
 
     /** Callback method called when a block is ready to be pushed / stored. */
     def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
-      storeBlockWithRanges(blockId,
-        arrayBuffer.asInstanceOf[mutable.ArrayBuffer[T]])
+      storeBlockWithRanges(blockId, arrayBuffer.asInstanceOf[mutable.ArrayBuffer[T]])
     }
 
     /** Callback called in case of any error in internal of the BlockGenerator */

@@ -65,7 +65,7 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
           s"seq number ranges: ${seqNumRanges.mkString(", ")} ")
 
       new KinesisBackedBlockRDD(
-        context.sc, regionName, endpointUrl, blockIds, seqNumRanges,
+        context.sc, endpointUrl, blockIds, seqNumRanges,
         isBlockIdValid = isBlockIdValid,
         messageHandler = messageHandler,
         kinesisCreds = kinesisCreds,
